@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lyric Video Generator</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Sidebar Controls -->
+        <aside id="sidebar">
+            <h1>Lyric Video<br>Generator</h1>
+
+            <div class="control-group">
+                <label>Judul Lagu</label>
+                <input type="text" id="songTitle" value="Stars" placeholder="Judul lagu...">
+            </div>
+
+            <div class="control-group">
+                <label>Nama Artis</label>
+                <input type="text" id="artistName" value="Ayla Nereo" placeholder="Nama artis...">
+            </div>
+
+            <div class="control-group">
+                <label>Lirik (satu baris per line)</label>
+                <textarea id="lyricsInput" rows="8" placeholder="Masukkan lirik di sini...">We are made of stars
+Dancing in the dark
+Light up the sky tonight
+With every beat of heart
+Arrows flying high
+Birds across the moon
+Singing out our song
+Underneath the tune
+We shine like diamonds
+In the velvet night
+Every word we speak
+Becomes a point of light</textarea>
+            </div>
+
+            <div class="control-group">
+                <label>Durasi per Baris (detik)</label>
+                <input type="range" id="lineDuration" min="1" max="6" step="0.5" value="3">
+                <span id="lineDurationVal">3s</span>
+            </div>
+
+            <div class="control-group">
+                <label>Tema Warna</label>
+                <div class="theme-buttons">
+                    <button class="theme-btn active" data-theme="warm" style="background: linear-gradient(135deg, #f5e6c8, #e8c99b)"></button>
+                    <button class="theme-btn" data-theme="night" style="background: linear-gradient(135deg, #1a1a2e, #16213e)"></button>
+                    <button class="theme-btn" data-theme="forest" style="background: linear-gradient(135deg, #2d5016, #4a7c28)"></button>
+                    <button class="theme-btn" data-theme="sunset" style="background: linear-gradient(135deg, #ff6b6b, #ffa07a)"></button>
+                    <button class="theme-btn" data-theme="ocean" style="background: linear-gradient(135deg, #0077b6, #00b4d8)"></button>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label>Gaya Animasi</label>
+                <select id="animationStyle">
+                    <option value="artistic">Artistik (Burung & Panah)</option>
+                    <option value="particles">Partikel Bintang</option>
+                    <option value="waves">Gelombang</option>
+                    <option value="minimal">Minimal</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>Font</label>
+                <select id="fontStyle">
+                    <option value="serif">Serif (Klasik)</option>
+                    <option value="sans">Sans-Serif (Modern)</option>
+                    <option value="display">Display (Bold)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label>Audio (opsional)</label>
+                <input type="file" id="audioFile" accept="audio/*">
+            </div>
+
+            <div class="button-group">
+                <button id="previewBtn" class="btn btn-primary">Preview</button>
+                <button id="playPauseBtn" class="btn btn-secondary" disabled>Pause</button>
+                <button id="recordBtn" class="btn btn-record">Rekam Video</button>
+            </div>
+
+            <div id="recordingStatus" class="recording-status hidden">
+                <div class="rec-dot"></div>
+                <span>Merekam...</span>
+            </div>
+        </aside>
+
+        <!-- Canvas Preview -->
+        <main id="preview-area">
+            <canvas id="lyricCanvas" width="1280" height="720"></canvas>
+            <div id="timeline">
+                <div id="timelineProgress"></div>
+            </div>
+        </main>
+    </div>
+
+    <script src="animations.js"></script>
+    <script src="engine.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
