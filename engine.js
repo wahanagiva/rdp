@@ -171,11 +171,8 @@ const EASING = {
 };
 const EASING_NAMES = Object.keys(EASING);
 
-// Text effect names for randomization
-const TEXT_EFFECTS = ['fadeIn', 'typewriter', 'slideUp', 'slideDown', 'scaleIn', 'glowPulse', 'waveText', 'flickerIn'];
-
-// Background effect names for randomization
-const BG_EFFECTS = ['gradientShift', 'radialPulse', 'diagonalWipe', 'vignette', 'none'];
+// Text effect and background effect names come from animations.js:
+// TEXT_EFFECT_NAMES and BACKGROUND_EFFECT_NAMES are defined there.
 
 // SECTION 4: StyleRandomizer class
 class StyleRandomizer {
@@ -218,18 +215,18 @@ class StyleRandomizer {
             prevFont = fontIdx;
 
             // Pick text effect avoiding consecutive duplicate
-            var textEffect = this._pick(TEXT_EFFECTS);
-            if (textEffect === prevTextEffect && TEXT_EFFECTS.length > 1) {
+            var textEffect = this._pick(TEXT_EFFECT_NAMES);
+            if (textEffect === prevTextEffect && TEXT_EFFECT_NAMES.length > 1) {
                 var safeCount = 0;
                 while (textEffect === prevTextEffect && safeCount < 10) {
-                    textEffect = this._pick(TEXT_EFFECTS);
+                    textEffect = this._pick(TEXT_EFFECT_NAMES);
                     safeCount++;
                 }
             }
             prevTextEffect = textEffect;
 
             // Background changes ~60% of the time
-            var bgEffect = this._seededRandom() < 0.6 ? this._pick(BG_EFFECTS) : 'none';
+            var bgEffect = this._seededRandom() < 0.6 ? this._pick(BACKGROUND_EFFECT_NAMES) : BACKGROUND_EFFECT_NAMES[0];
 
             // Pick easing
             var easing = this._pick(EASING_NAMES);
