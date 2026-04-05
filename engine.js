@@ -414,12 +414,19 @@ class LyricVideoEngine {
         // Config - SRT based
         this.cues = []; // [{start, end, text}]
         this.seed = 42;
+        this.songTitle = '';
+        this.artistName = '';
+        this.introEnd = 0; // calculated from first cue
 
         // Audio
         this.audioContext = null;
         this.audioSource = null;
         this.audioBuffer = null;
         this.audioStartTime = 0;
+
+        // YouTube player
+        this.ytPlayer = null;
+        this.useYoutube = false;
 
         // Recording
         this.mediaRecorder = null;
@@ -431,14 +438,23 @@ class LyricVideoEngine {
         this.onComplete = null;
     }
 
-    configure({ srtText, seed }) {
+    configure({ srtText, seed, songTitle, artistName }) {
         if (srtText !== undefined) {
             this.cues = parseSRT(srtText);
         }
         if (seed !== undefined) this.seed = seed;
+        if (songTitle !== undefined) this.songTitle = songTitle;
+        if (artistName !== undefined) this.artistName = artistName;
 
         // Generate randomized styles for each cue
         this.styleRandomizer.generateStyles(this.cues.length, this.seed);
+
+        // Calculate intro duration: if first cue starts >= 2s AND we have title/artist, show intro
+        if (this.cues.length > 0 && this.cues[0].start >= 2 && (this.songTitle || this.artistName)) {
+            this.introEnd = this.cues[0].start;
+        } else {
+            this.introEnd = 0;
+        }
 
         // Total duration = end of last cue + 1s buffer
         if (this.cues.length > 0) {
@@ -446,6 +462,16 @@ class LyricVideoEngine {
         } else {
             this.totalDuration = 0;
         }
+    }
+
+    setYouTubePlayer(player) {
+        this.ytPlayer = player;
+        this.useYoutube = true;
+    }
+
+    clearYouTube() {
+        this.ytPlayer = null;
+        this.useYoutube = false;
     }
 
     async loadAudio(file) {
@@ -461,7 +487,10 @@ class LyricVideoEngine {
         this._lastLineIndex = -1;
         this._lastBgEffect = '';
 
-        if (this.audioBuffer && this.audioContext) {
+        if (this.useYoutube && this.ytPlayer) {
+            this.ytPlayer.seekTo(0, true);
+            this.ytPlayer.playVideo();
+        } else if (this.audioBuffer && this.audioContext) {
             this.audioSource = this.audioContext.createBufferSource();
             this.audioSource.buffer = this.audioBuffer;
             this.audioSource.connect(this.audioContext.destination);
@@ -474,7 +503,9 @@ class LyricVideoEngine {
 
     pause() {
         this.playing = false;
-        if (this.audioContext && this.audioContext.state === 'running') {
+        if (this.useYoutube && this.ytPlayer) {
+            this.ytPlayer.pauseVideo();
+        } else if (this.audioContext && this.audioContext.state === 'running') {
             this.audioContext.suspend();
         }
     }
@@ -482,7 +513,9 @@ class LyricVideoEngine {
     resume() {
         this.playing = true;
         this.lastTimestamp = null;
-        if (this.audioContext && this.audioContext.state === 'suspended') {
+        if (this.useYoutube && this.ytPlayer) {
+            this.ytPlayer.playVideo();
+        } else if (this.audioContext && this.audioContext.state === 'suspended') {
             this.audioContext.resume();
         }
         this._animate();
@@ -490,7 +523,9 @@ class LyricVideoEngine {
 
     stop() {
         this.playing = false;
-        if (this.audioSource) {
+        if (this.useYoutube && this.ytPlayer) {
+            try { this.ytPlayer.stopVideo(); } catch (e) { /* ignore */ }
+        } else if (this.audioSource) {
             try { this.audioSource.stop(); } catch (e) { /* ignore */ }
         }
     }
@@ -549,7 +584,13 @@ class LyricVideoEngine {
         var now = timestamp || performance.now();
         var dt = Math.min((now - this.lastTimestamp) / 1000, 0.05);
         this.lastTimestamp = now;
-        this.currentTime += dt;
+
+        // Sync time from YouTube player if available
+        if (this.useYoutube && this.ytPlayer && typeof this.ytPlayer.getCurrentTime === 'function') {
+            this.currentTime = this.ytPlayer.getCurrentTime();
+        } else {
+            this.currentTime += dt;
+        }
 
         if (this.onProgress && this.totalDuration > 0) {
             this.onProgress(this.currentTime / this.totalDuration);
@@ -621,6 +662,11 @@ class LyricVideoEngine {
         // Draw background effects
         this.bgManager.draw(ctx, activePalette);
 
+        // Draw intro if before first cue and we have title/artist
+        if (cueIndex < 0 && t < this.introEnd && this.introEnd > 0) {
+            this._drawIntro(ctx, w, h, t, this.introEnd, activePalette);
+        }
+
         // Draw lyrics if a cue is active
         if (cueIndex >= 0) {
             this._drawLyrics(ctx, w, h, cueIndex);
@@ -674,6 +720,39 @@ class LyricVideoEngine {
             ctx.fillText(nextCue.text, w / 2, h * 0.65);
             ctx.restore();
         }
+    }
+
+    _drawIntro(ctx, w, h, t, duration, palette) {
+        var progress = t / duration;
+        var fadeIn = this._easeInOut(Math.min(1, progress * 2.5));
+        var fadeOut = progress > 0.7 ? this._easeIn((progress - 0.7) / 0.3) : 0;
+        var alpha = fadeIn * (1 - fadeOut);
+
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        // Song title
+        if (this.songTitle) {
+            ctx.globalAlpha = alpha;
+            ctx.fillStyle = palette.text;
+            var titleSize = Math.min(w * 0.06, 56);
+            ctx.font = '700 ' + titleSize + 'px Georgia, "Times New Roman", serif';
+            ctx.fillText(this.songTitle, w / 2, h * 0.42);
+        }
+
+        // Artist name (smaller, delayed slightly)
+        if (this.artistName) {
+            var artistFade = this._easeInOut(Math.max(0, Math.min(1, (progress - 0.15) * 2.5)));
+            ctx.globalAlpha = artistFade * (1 - fadeOut);
+            ctx.fillStyle = palette.secondary;
+            var artistSize = Math.min(w * 0.03, 28);
+            ctx.font = '400 ' + artistSize + 'px "Segoe UI", Arial, sans-serif';
+            var yPos = this.songTitle ? h * 0.42 + 50 : h * 0.45;
+            ctx.fillText(this.artistName, w / 2, yPos);
+        }
+
+        ctx.restore();
     }
 
     _calcFontSize(text, canvasWidth, fontFamily, fontWeight) {

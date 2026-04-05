@@ -19,8 +19,29 @@
             </div>
 
             <div class="control-group">
-                <label>Audio (opsional)</label>
-                <input type="file" id="audioFile" accept="audio/*">
+                <label>Judul Lagu (opsional)</label>
+                <input type="text" id="songTitle" placeholder="Nama lagu...">
+            </div>
+
+            <div class="control-group">
+                <label>Artist (opsional)</label>
+                <input type="text" id="artistName" placeholder="Nama artist...">
+            </div>
+
+            <div class="control-group">
+                <label>Audio</label>
+                <div class="audio-tabs">
+                    <button id="tabFile" class="tab-btn active">File</button>
+                    <button id="tabYoutube" class="tab-btn">YouTube</button>
+                </div>
+                <div id="audioFilePanel">
+                    <input type="file" id="audioFile" accept="audio/*">
+                </div>
+                <div id="audioYoutubePanel" class="hidden">
+                    <input type="text" id="youtubeUrl" placeholder="https://youtube.com/watch?v=...">
+                    <button id="loadYtBtn" class="btn btn-small">Load</button>
+                    <span id="ytStatus" class="srt-status"></span>
+                </div>
             </div>
 
             <div class="control-group">
@@ -52,6 +73,11 @@
         </main>
     </div>
 
+    <div id="yt-container" style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;">
+        <div id="ytPlayer"></div>
+    </div>
+
+    <script src="https://www.youtube.com/iframe_api"></script>
     <script src="animations.js"></script>
     <script src="engine.js"></script>
     <script src="app.js"></script>
