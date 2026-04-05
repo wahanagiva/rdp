@@ -361,23 +361,21 @@ class LyricVideoEngine {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
         this.styleRandomizer = new StyleRandomizer();
-        this.animManager = new AnimationManager(canvas);
+        this.bgManager = new BackgroundManager(canvas);
 
         // State
         this.playing = false;
         this.currentTime = 0;
         this.totalDuration = 0;
         this.lastTimestamp = null;
+        this._lastLineIndex = -1;
+        this._lastBgEffect = '';
 
         // Config
         this.songTitle = 'Stars';
         this.artistName = 'Ayla Nereo';
         this.lyrics = [];
         this.lineDuration = 3;
-        this.theme = THEMES.warm;
-        this.themeName = 'warm';
-        this.animStyle = 'artistic';
-        this.fontStyle = 'serif';
         this.seed = 42;
 
         // Audio
@@ -394,29 +392,15 @@ class LyricVideoEngine {
         // Callbacks
         this.onProgress = null;
         this.onComplete = null;
-
-        // Text animation state
-        this.textAnimState = {
-            currentLine: -1,
-            charRevealProgress: 0,
-            lineOpacity: 0,
-            prevLineOpacity: 1,
-        };
     }
 
-    configure({ title, artist, lyrics, lineDuration, theme, animStyle, fontStyle, seed }) {
+    configure({ title, artist, lyrics, lineDuration, seed }) {
         if (title !== undefined) this.songTitle = title;
         if (artist !== undefined) this.artistName = artist;
         if (lyrics !== undefined) {
             this.lyrics = lyrics.split('\n').filter(function (l) { return l.trim().length > 0; });
         }
         if (lineDuration !== undefined) this.lineDuration = lineDuration;
-        if (theme !== undefined) {
-            this.themeName = theme;
-            this.theme = THEMES[theme] || THEMES.warm;
-        }
-        if (animStyle !== undefined) this.animStyle = animStyle;
-        if (fontStyle !== undefined) this.fontStyle = fontStyle;
         if (seed !== undefined) this.seed = seed;
 
         // Generate randomized styles for each lyric line
@@ -436,8 +420,8 @@ class LyricVideoEngine {
         this.currentTime = 0;
         this.lastTimestamp = null;
         this.playing = true;
-        this.animManager.reset();
-        this.textAnimState = { currentLine: -1, charRevealProgress: 0, lineOpacity: 0, prevLineOpacity: 1 };
+        this._lastLineIndex = -1;
+        this._lastBgEffect = '';
 
         if (this.audioBuffer && this.audioContext) {
             this.audioSource = this.audioContext.createBufferSource();
@@ -540,7 +524,7 @@ class LyricVideoEngine {
             return;
         }
 
-        this.animManager.update(dt, this.animStyle);
+        this.bgManager.update(dt);
         this._draw();
 
         var self = this;
@@ -551,42 +535,63 @@ class LyricVideoEngine {
         var ctx = this.ctx;
         var w = this.canvas.width;
         var h = this.canvas.height;
-        var theme = this.theme;
-        var fonts = FONTS[this.fontStyle] || FONTS.serif;
 
         var introEnd = this.lineDuration * 2;
         var lyricsEnd = introEnd + this.lyrics.length * this.lineDuration;
         var t = this.currentTime;
 
-        // Determine active palette (interpolated during lyrics phase)
-        var activePalette = theme;
+        // Determine active palette
+        var activePalette = COLOR_PALETTES[0];
+        var activeFont = FONT_STACKS[0];
         if (t >= introEnd && t < lyricsEnd) {
             var lyricTime = t - introEnd;
             var lineIndex = Math.floor(lyricTime / this.lineDuration);
             var lineProgress = (lyricTime % this.lineDuration) / this.lineDuration;
             if (lineIndex < this.lyrics.length && this.styleRandomizer.lineStyles.length > 0) {
                 activePalette = this.styleRandomizer.getInterpolatedPalette(lineIndex, lineProgress);
+                var style = this.styleRandomizer.getStyle(lineIndex);
+                activeFont = style.font;
+
+                // Transition background effect when line changes
+                if (lineIndex !== this._lastLineIndex) {
+                    this._lastLineIndex = lineIndex;
+                    if (style.bgEffect !== this._lastBgEffect) {
+                        this.bgManager.transitionTo(style.bgEffect);
+                        this._lastBgEffect = style.bgEffect;
+                    }
+                }
+            }
+        } else if (t < introEnd) {
+            // Use first line's palette for intro if available
+            if (this.styleRandomizer.lineStyles.length > 0) {
+                activePalette = this.styleRandomizer.getStyle(0).palette;
+            }
+        } else {
+            // Outro - use last line's palette
+            var lastIdx = this.lyrics.length - 1;
+            if (this.styleRandomizer.lineStyles.length > 0 && lastIdx >= 0) {
+                activePalette = this.styleRandomizer.getStyle(lastIdx).palette;
             }
         }
 
         // Background gradient
         var grad = ctx.createLinearGradient(0, 0, w, h);
-        var bg0 = activePalette.bgGradient ? activePalette.bgGradient[0] : (theme.bgGradient ? theme.bgGradient[0] : '#000');
-        var bg1 = activePalette.bgGradient ? activePalette.bgGradient[1] : (theme.bgGradient ? theme.bgGradient[1] : '#111');
-        grad.addColorStop(0, bg0);
-        grad.addColorStop(1, bg1);
+        grad.addColorStop(0, activePalette.bgGradient[0]);
+        grad.addColorStop(1, activePalette.bgGradient[1]);
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, w, h);
 
-        // Draw decorative elements behind text
-        this.animManager.draw(ctx, this.animStyle, theme);
+        // Draw background effects
+        this.bgManager.draw(ctx, activePalette);
 
+        // Draw content
+        var introFont = { title: activeFont.family, artist: activeFont.family };
         if (t < introEnd) {
-            this._drawIntro(ctx, w, h, t, introEnd, theme, fonts);
+            this._drawIntro(ctx, w, h, t, introEnd, activePalette, introFont);
         } else if (t < lyricsEnd) {
             this._drawLyrics(ctx, w, h, t - introEnd);
         } else {
-            this._drawOutro(ctx, w, h, t - lyricsEnd, this.lineDuration * 2, theme, fonts);
+            this._drawOutro(ctx, w, h, t - lyricsEnd, this.lineDuration * 2, activePalette, introFont);
         }
     }
 
@@ -650,7 +655,6 @@ class LyricVideoEngine {
         if (lineIndex >= this.lyrics.length) return;
 
         var currentLine = this.lyrics[lineIndex];
-        var prevLine = lineIndex > 0 ? this.lyrics[lineIndex - 1] : null;
         var nextLine = lineIndex < this.lyrics.length - 1 ? this.lyrics[lineIndex + 1] : null;
 
         // Get randomized style for this line
@@ -659,7 +663,7 @@ class LyricVideoEngine {
         var fontStack = style ? style.font : FONT_STACKS[0];
         var easingName = style ? style.easing : 'easeOutCubic';
         var easingFn = EASING[easingName] || EASING.easeOutCubic;
-        var textEffect = style ? style.textEffect : 'fadeIn';
+        var textEffectName = style ? style.textEffect : 'fade';
 
         var fontFamily = fontStack.family;
         var fontWeight = fontStack.weight;
@@ -670,27 +674,16 @@ class LyricVideoEngine {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
 
-        // Previous line fading out
-        if (prevLine && lineProgress < 0.3) {
-            ctx.save();
-            var fadeOut = 1 - lineProgress / 0.3;
-            ctx.globalAlpha = fadeOut * 0.3;
-            ctx.fillStyle = palette.secondary;
-            var prevSize = mainSize * 0.6;
-            ctx.font = '400 ' + prevSize + 'px ' + fontFamily;
-            ctx.fillText(prevLine, w / 2, h * 0.35);
-            ctx.restore();
-        }
-
-        // Current line with selected text effect
-        var fadeIn = easingFn(Math.min(1, lineProgress * 4));
-        var fadeOut2 = lineProgress > 0.8 ? 1 - (lineProgress - 0.8) / 0.2 : 1;
-
+        // Current line with TEXT_EFFECTS system
         ctx.save();
         ctx.font = fontWeight + ' ' + mainSize + 'px ' + fontFamily;
+        ctx.fillStyle = palette.text;
 
-        // Apply text effect
-        this._applyTextEffect(ctx, w, h, currentLine, mainSize, fadeIn, fadeOut2, lineProgress, palette, textEffect, fontFamily, fontWeight);
+        var effectFn = TEXT_EFFECTS[textEffectName] || TEXT_EFFECTS.fade;
+        effectFn(ctx, currentLine, w / 2, h / 2, w, h, lineProgress, easingFn, {
+            fontSize: mainSize,
+            palette: palette
+        });
 
         ctx.restore();
 
@@ -709,116 +702,6 @@ class LyricVideoEngine {
 
         // Attribution
         this._drawAttribution(ctx, w, h, palette);
-    }
-
-    _applyTextEffect(ctx, w, h, text, size, fadeIn, fadeOut, lineProgress, palette, effect, fontFamily, fontWeight) {
-        var alpha = fadeIn * fadeOut;
-        var textWidth = ctx.measureText(text).width;
-
-        switch (effect) {
-            case 'typewriter': {
-                var revealChars = Math.floor(text.length * Math.min(1, lineProgress * 3));
-                var revealed = text.substring(0, revealChars);
-                var hidden = text.substring(revealChars);
-                var fullWidth = textWidth;
-                var startX = w / 2 - fullWidth / 2;
-
-                ctx.globalAlpha = fadeOut;
-                ctx.fillStyle = palette.text;
-                ctx.textAlign = 'left';
-                ctx.fillText(revealed, startX, h / 2);
-
-                if (hidden) {
-                    ctx.globalAlpha = fadeOut * 0.12;
-                    var revealedWidth = ctx.measureText(revealed).width;
-                    ctx.fillText(hidden, startX + revealedWidth, h / 2);
-                }
-                break;
-            }
-            case 'slideUp': {
-                var offsetY = (1 - fadeIn) * 60;
-                ctx.globalAlpha = alpha;
-                ctx.fillStyle = palette.text;
-                ctx.textAlign = 'center';
-                ctx.fillText(text, w / 2, h / 2 + offsetY);
-                break;
-            }
-            case 'slideDown': {
-                var offsetYd = -(1 - fadeIn) * 60;
-                ctx.globalAlpha = alpha;
-                ctx.fillStyle = palette.text;
-                ctx.textAlign = 'center';
-                ctx.fillText(text, w / 2, h / 2 + offsetYd);
-                break;
-            }
-            case 'scaleIn': {
-                var scale = 0.5 + fadeIn * 0.5;
-                ctx.globalAlpha = alpha;
-                ctx.fillStyle = palette.text;
-                ctx.textAlign = 'center';
-                ctx.save();
-                ctx.translate(w / 2, h / 2);
-                ctx.scale(scale, scale);
-                ctx.fillText(text, 0, 0);
-                ctx.restore();
-                break;
-            }
-            case 'glowPulse': {
-                var glowAmount = Math.sin(lineProgress * Math.PI * 3) * 8 + 8;
-                ctx.globalAlpha = alpha;
-                ctx.fillStyle = palette.text;
-                ctx.textAlign = 'center';
-                ctx.shadowColor = palette.accent;
-                ctx.shadowBlur = glowAmount;
-                ctx.fillText(text, w / 2, h / 2);
-                ctx.shadowBlur = 0;
-                break;
-            }
-            case 'waveText': {
-                ctx.globalAlpha = alpha;
-                ctx.fillStyle = palette.text;
-                ctx.textAlign = 'left';
-                var totalWidth = textWidth;
-                var sx = w / 2 - totalWidth / 2;
-                for (var ci = 0; ci < text.length; ci++) {
-                    var ch = text[ci];
-                    var charOffset = Math.sin(lineProgress * Math.PI * 4 + ci * 0.4) * 8;
-                    ctx.fillText(ch, sx, h / 2 + charOffset);
-                    sx += ctx.measureText(ch).width;
-                }
-                break;
-            }
-            case 'flickerIn': {
-                var flicker = lineProgress < 0.3 ? (Math.sin(lineProgress * 80) > 0 ? 1 : 0.2) : 1;
-                ctx.globalAlpha = alpha * flicker;
-                ctx.fillStyle = palette.text;
-                ctx.textAlign = 'center';
-                ctx.fillText(text, w / 2, h / 2);
-                break;
-            }
-            case 'fadeIn':
-            default: {
-                // Background highlight
-                var padding = 20;
-                ctx.fillStyle = palette.textShadow || 'rgba(0,0,0,0.1)';
-                var bgAlpha = alpha * 0.35;
-                ctx.globalAlpha = bgAlpha;
-                this._roundRect(ctx,
-                    w / 2 - textWidth / 2 - padding,
-                    h / 2 - size / 2 - padding / 2,
-                    textWidth + padding * 2,
-                    size + padding,
-                    8
-                );
-                ctx.fill();
-
-                ctx.globalAlpha = alpha;
-                ctx.fillStyle = palette.text;
-                ctx.textAlign = 'center';
-                ctx.fillText(text, w / 2, h / 2);
-                break;
-            }
-        }
     }
 
     _drawOutro(ctx, w, h, t, duration, palette, font) {
