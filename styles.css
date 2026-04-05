@@ -192,6 +192,13 @@ input[type="file"]::file-selector-button {
     font-family: monospace;
 }
 
+.srt-status {
+    display: block;
+    margin-top: 6px;
+    font-size: 12px;
+    color: #999;
+}
+
 .recording-status {
     display: flex;
     align-items: center;
