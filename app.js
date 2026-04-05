@@ -1,32 +1,50 @@
 (function () {
-    const canvas = document.getElementById('lyricCanvas');
-    const engine = new LyricVideoEngine(canvas);
+    var canvas = document.getElementById('lyricCanvas');
+    var engine = new LyricVideoEngine(canvas);
 
-    const songTitleInput = document.getElementById('songTitle');
-    const artistNameInput = document.getElementById('artistName');
-    const lyricsInput = document.getElementById('lyricsInput');
-    const lineDurationInput = document.getElementById('lineDuration');
-    const lineDurationVal = document.getElementById('lineDurationVal');
-    const audioFileInput = document.getElementById('audioFile');
-    const previewBtn = document.getElementById('previewBtn');
-    const playPauseBtn = document.getElementById('playPauseBtn');
-    const recordBtn = document.getElementById('recordBtn');
-    const recordingStatus = document.getElementById('recordingStatus');
-    const timelineProgress = document.getElementById('timelineProgress');
-    const randomizeSeedBtn = document.getElementById('randomizeSeed');
-    const seedDisplay = document.getElementById('seedDisplay');
+    var srtFileInput = document.getElementById('srtFile');
+    var srtStatus = document.getElementById('srtStatus');
+    var audioFileInput = document.getElementById('audioFile');
+    var previewBtn = document.getElementById('previewBtn');
+    var playPauseBtn = document.getElementById('playPauseBtn');
+    var recordBtn = document.getElementById('recordBtn');
+    var recordingStatus = document.getElementById('recordingStatus');
+    var timelineProgress = document.getElementById('timelineProgress');
+    var randomizeSeedBtn = document.getElementById('randomizeSeed');
+    var seedDisplay = document.getElementById('seedDisplay');
 
-    let currentSeed = Date.now();
+    var currentSeed = Date.now();
+    var currentSrtText = '';
     seedDisplay.textContent = 'seed: ' + currentSeed;
 
-    // Duration slider
-    lineDurationInput.addEventListener('input', () => {
-        lineDurationVal.textContent = lineDurationInput.value + 's';
+    // SRT file loading
+    srtFileInput.addEventListener('change', function (e) {
+        var file = e.target.files[0];
+        if (!file) return;
+
+        var reader = new FileReader();
+        reader.onload = function (ev) {
+            currentSrtText = ev.target.result;
+            engine.configure({ srtText: currentSrtText, seed: currentSeed });
+
+            if (engine.cues.length > 0) {
+                srtStatus.textContent = engine.cues.length + ' baris lirik dimuat (' + Math.round(engine.totalDuration) + 's)';
+                srtStatus.style.color = '#7cb342';
+                previewBtn.disabled = false;
+                recordBtn.disabled = false;
+            } else {
+                srtStatus.textContent = 'Tidak ada subtitle ditemukan';
+                srtStatus.style.color = '#e74c3c';
+                previewBtn.disabled = true;
+                recordBtn.disabled = true;
+            }
+        };
+        reader.readAsText(file);
     });
 
     // Audio file
-    audioFileInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
+    audioFileInput.addEventListener('change', async function (e) {
+        var file = e.target.files[0];
         if (file) {
             try {
                 await engine.loadAudio(file);
@@ -37,44 +55,27 @@
     });
 
     // Randomize button
-    randomizeSeedBtn.addEventListener('click', () => {
+    randomizeSeedBtn.addEventListener('click', function () {
         currentSeed = Date.now();
         seedDisplay.textContent = 'seed: ' + currentSeed;
-        if (!engine.playing) {
-            applyConfig();
-            engine.onProgress = (p) => {
-                timelineProgress.style.width = (p * 100) + '%';
-            };
-            engine.onComplete = () => {
-                playPauseBtn.textContent = 'Replay';
-                playPauseBtn.disabled = false;
-            };
-            engine.start();
-            playPauseBtn.disabled = false;
-            playPauseBtn.textContent = 'Pause';
+
+        if (currentSrtText && engine.cues.length > 0) {
+            engine.configure({ srtText: currentSrtText, seed: currentSeed });
+            if (!engine.playing) {
+                startPreview();
+            }
         }
     });
 
-    function applyConfig() {
-        engine.configure({
-            title: songTitleInput.value || 'Untitled',
-            artist: artistNameInput.value || 'Unknown Artist',
-            lyrics: lyricsInput.value,
-            lineDuration: parseFloat(lineDurationInput.value),
-            seed: currentSeed,
-        });
-    }
-
-    // Preview
-    previewBtn.addEventListener('click', () => {
-        applyConfig();
+    function startPreview() {
         engine.stop();
+        engine.configure({ srtText: currentSrtText, seed: currentSeed });
 
-        engine.onProgress = (p) => {
+        engine.onProgress = function (p) {
             timelineProgress.style.width = (p * 100) + '%';
         };
 
-        engine.onComplete = () => {
+        engine.onComplete = function () {
             playPauseBtn.textContent = 'Replay';
             playPauseBtn.disabled = false;
         };
@@ -82,14 +83,18 @@
         engine.start();
         playPauseBtn.disabled = false;
         playPauseBtn.textContent = 'Pause';
+    }
+
+    // Preview
+    previewBtn.addEventListener('click', function () {
+        if (!currentSrtText || engine.cues.length === 0) return;
+        startPreview();
     });
 
     // Play/Pause
-    playPauseBtn.addEventListener('click', () => {
+    playPauseBtn.addEventListener('click', function () {
         if (playPauseBtn.textContent === 'Replay') {
-            applyConfig();
-            engine.start();
-            playPauseBtn.textContent = 'Pause';
+            startPreview();
             return;
         }
 
@@ -103,7 +108,9 @@
     });
 
     // Record
-    recordBtn.addEventListener('click', () => {
+    recordBtn.addEventListener('click', function () {
+        if (!currentSrtText || engine.cues.length === 0) return;
+
         if (engine.isRecording) {
             engine.stopRecording();
             engine.stop();
@@ -112,14 +119,14 @@
             return;
         }
 
-        applyConfig();
         engine.stop();
+        engine.configure({ srtText: currentSrtText, seed: currentSeed });
 
-        engine.onProgress = (p) => {
+        engine.onProgress = function (p) {
             timelineProgress.style.width = (p * 100) + '%';
         };
 
-        engine.onComplete = () => {
+        engine.onComplete = function () {
             recordingStatus.classList.add('hidden');
             recordBtn.textContent = 'Rekam Video';
             playPauseBtn.textContent = 'Replay';
@@ -135,12 +142,12 @@
 
     // Initial frame
     function drawInitialFrame() {
-        const ctx = canvas.getContext('2d');
-        const w = canvas.width;
-        const h = canvas.height;
-        const palette = COLOR_PALETTES[0];
+        var ctx = canvas.getContext('2d');
+        var w = canvas.width;
+        var h = canvas.height;
+        var palette = COLOR_PALETTES[0];
 
-        const grad = ctx.createLinearGradient(0, 0, w, h);
+        var grad = ctx.createLinearGradient(0, 0, w, h);
         grad.addColorStop(0, palette.bgGradient[0]);
         grad.addColorStop(1, palette.bgGradient[1]);
         ctx.fillStyle = grad;
@@ -149,33 +156,21 @@
         ctx.fillStyle = palette.text;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.globalAlpha = 0.12;
-        ctx.font = '900 140px Georgia, serif';
-        const nameParts = (artistNameInput.value || 'ARTIST').toUpperCase().split(' ');
-        nameParts.forEach((part, i) => {
-            ctx.fillText(part, w / 2, h / 2 + (i - (nameParts.length - 1) / 2) * 150);
-        });
 
         ctx.globalAlpha = 1;
-        ctx.font = '700 64px Georgia, serif';
-        ctx.fillText((songTitleInput.value || 'TITLE').toUpperCase(), w / 2, h * 0.35);
+        ctx.font = '700 48px Georgia, serif';
+        ctx.fillText('LYRIC VIDEO GENERATOR', w / 2, h * 0.4);
 
         ctx.globalAlpha = 0.5;
         ctx.font = '400 22px "Segoe UI", sans-serif';
-        ctx.fillStyle = palette.secondary;
-        ctx.fillText('Klik "Preview" untuk mulai', w / 2, h * 0.62);
+        ctx.fillStyle = palette.secondary || '#888';
+        ctx.fillText('Muat file .SRT untuk mulai', w / 2, h * 0.52);
 
         ctx.globalAlpha = 0.3;
         ctx.font = '400 16px "Segoe UI", sans-serif';
-        ctx.fillText('5,400,000+ kombinasi visual unik', w / 2, h * 0.68);
+        ctx.fillText('5,400,000+ kombinasi visual unik', w / 2, h * 0.6);
         ctx.globalAlpha = 1;
     }
 
     drawInitialFrame();
-
-    [songTitleInput, artistNameInput].forEach(input => {
-        input.addEventListener('input', () => {
-            if (!engine.playing) drawInitialFrame();
-        });
-    });
 })();

@@ -352,7 +352,50 @@ class StyleRandomizer {
     }
 }
 
-// SECTION 5: LyricVideoEngine class
+// SRT Parser
+function parseSRT(srtText) {
+    var cues = [];
+    var blocks = srtText.trim().replace(/\r\n/g, '\n').split(/\n\n+/);
+    for (var i = 0; i < blocks.length; i++) {
+        var lines = blocks[i].trim().split('\n');
+        if (lines.length < 3) continue;
+        var timeMatch = lines[1].match(/(\d{2}):(\d{2}):(\d{2})[,.](\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})[,.](\d{3})/);
+        if (!timeMatch) continue;
+        var startSec = parseInt(timeMatch[1]) * 3600 + parseInt(timeMatch[2]) * 60 + parseInt(timeMatch[3]) + parseInt(timeMatch[4]) / 1000;
+        var endSec = parseInt(timeMatch[5]) * 3600 + parseInt(timeMatch[6]) * 60 + parseInt(timeMatch[7]) + parseInt(timeMatch[8]) / 1000;
+        var text = lines.slice(2).join(' ').replace(/<[^>]+>/g, '').trim();
+        if (text) cues.push({ start: startSec, end: endSec, text: text });
+    }
+    return cues;
+}
+
+// SRT Parser
+function parseSRT(srtText) {
+    var cues = [];
+    var blocks = srtText.trim().replace(/\r\n/g, '\n').split(/\n\n+/);
+    for (var i = 0; i < blocks.length; i++) {
+        var lines = blocks[i].trim().split('\n');
+        if (lines.length < 2) continue;
+        // Find the timing line (may or may not have a sequence number)
+        var timingLineIdx = -1;
+        for (var j = 0; j < lines.length; j++) {
+            if (lines[j].match(/\d{2}:\d{2}:\d{2}[,\.]\d{3}\s*-->\s*\d{2}:\d{2}:\d{2}[,\.]\d{3}/)) {
+                timingLineIdx = j;
+                break;
+            }
+        }
+        if (timingLineIdx < 0) continue;
+        var timeMatch = lines[timingLineIdx].match(/(\d{2}):(\d{2}):(\d{2})[,.](\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})[,.](\d{3})/);
+        if (!timeMatch) continue;
+        var startSec = parseInt(timeMatch[1]) * 3600 + parseInt(timeMatch[2]) * 60 + parseInt(timeMatch[3]) + parseInt(timeMatch[4]) / 1000;
+        var endSec = parseInt(timeMatch[5]) * 3600 + parseInt(timeMatch[6]) * 60 + parseInt(timeMatch[7]) + parseInt(timeMatch[8]) / 1000;
+        var text = lines.slice(timingLineIdx + 1).join(' ').replace(/<[^>]+>/g, '').trim();
+        if (text) cues.push({ start: startSec, end: endSec, text: text });
+    }
+    return cues;
+}
+
+// SECTION 5: LyricVideoEngine class (SRT-based)
 class LyricVideoEngine {
     constructor(canvas) {
         this.canvas = canvas;
@@ -368,11 +411,8 @@ class LyricVideoEngine {
         this._lastLineIndex = -1;
         this._lastBgEffect = '';
 
-        // Config
-        this.songTitle = 'Stars';
-        this.artistName = 'Ayla Nereo';
-        this.lyrics = [];
-        this.lineDuration = 3;
+        // Config - SRT based
+        this.cues = []; // [{start, end, text}]
         this.seed = 42;
 
         // Audio
@@ -391,20 +431,21 @@ class LyricVideoEngine {
         this.onComplete = null;
     }
 
-    configure({ title, artist, lyrics, lineDuration, seed }) {
-        if (title !== undefined) this.songTitle = title;
-        if (artist !== undefined) this.artistName = artist;
-        if (lyrics !== undefined) {
-            this.lyrics = lyrics.split('\n').filter(function (l) { return l.trim().length > 0; });
+    configure({ srtText, seed }) {
+        if (srtText !== undefined) {
+            this.cues = parseSRT(srtText);
         }
-        if (lineDuration !== undefined) this.lineDuration = lineDuration;
         if (seed !== undefined) this.seed = seed;
 
-        // Generate randomized styles for each lyric line
-        this.styleRandomizer.generateStyles(this.lyrics.length, this.seed);
+        // Generate randomized styles for each cue
+        this.styleRandomizer.generateStyles(this.cues.length, this.seed);
 
-        // Intro (title card) + lyrics + outro
-        this.totalDuration = this.lineDuration * 2 + this.lyrics.length * this.lineDuration + this.lineDuration * 2;
+        // Total duration = end of last cue + 1s buffer
+        if (this.cues.length > 0) {
+            this.totalDuration = this.cues[this.cues.length - 1].end + 1;
+        } else {
+            this.totalDuration = 0;
+        }
     }
 
     async loadAudio(file) {
@@ -482,7 +523,7 @@ class LyricVideoEngine {
             var url = URL.createObjectURL(blob);
             var a = document.createElement('a');
             a.href = url;
-            a.download = self.songTitle + ' - ' + self.artistName + ' (Lyric Video).webm';
+            a.download = 'Lyric Video.webm';
             a.click();
             URL.revokeObjectURL(url);
             self.isRecording = false;
@@ -510,7 +551,7 @@ class LyricVideoEngine {
         this.lastTimestamp = now;
         this.currentTime += dt;
 
-        if (this.onProgress) {
+        if (this.onProgress && this.totalDuration > 0) {
             this.onProgress(this.currentTime / this.totalDuration);
         }
 
@@ -528,47 +569,46 @@ class LyricVideoEngine {
         requestAnimationFrame(function (ts) { self._animate(ts); });
     }
 
+    _findActiveCue(t) {
+        for (var i = 0; i < this.cues.length; i++) {
+            if (t >= this.cues[i].start && t < this.cues[i].end) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     _draw() {
         var ctx = this.ctx;
         var w = this.canvas.width;
         var h = this.canvas.height;
-
-        var introEnd = this.lineDuration * 2;
-        var lyricsEnd = introEnd + this.lyrics.length * this.lineDuration;
         var t = this.currentTime;
 
-        // Determine active palette
+        // Find active cue
+        var cueIndex = this._findActiveCue(t);
         var activePalette = COLOR_PALETTES[0];
-        var activeFont = FONT_STACKS[0];
-        if (t >= introEnd && t < lyricsEnd) {
-            var lyricTime = t - introEnd;
-            var lineIndex = Math.floor(lyricTime / this.lineDuration);
-            var lineProgress = (lyricTime % this.lineDuration) / this.lineDuration;
-            if (lineIndex < this.lyrics.length && this.styleRandomizer.lineStyles.length > 0) {
-                activePalette = this.styleRandomizer.getInterpolatedPalette(lineIndex, lineProgress);
-                var style = this.styleRandomizer.getStyle(lineIndex);
-                activeFont = style.font;
 
-                // Transition background effect when line changes
-                if (lineIndex !== this._lastLineIndex) {
-                    this._lastLineIndex = lineIndex;
-                    if (style.bgEffect !== this._lastBgEffect) {
-                        this.bgManager.transitionTo(style.bgEffect);
-                        this._lastBgEffect = style.bgEffect;
-                    }
+        if (cueIndex >= 0 && this.styleRandomizer.lineStyles.length > 0) {
+            var cue = this.cues[cueIndex];
+            var lineProgress = (t - cue.start) / (cue.end - cue.start);
+            activePalette = this.styleRandomizer.getInterpolatedPalette(cueIndex, lineProgress);
+            var style = this.styleRandomizer.getStyle(cueIndex);
+
+            // Transition background effect when line changes
+            if (cueIndex !== this._lastLineIndex) {
+                this._lastLineIndex = cueIndex;
+                if (style.bgEffect !== this._lastBgEffect) {
+                    this.bgManager.transitionTo(style.bgEffect);
+                    this._lastBgEffect = style.bgEffect;
                 }
             }
-        } else if (t < introEnd) {
-            // Use first line's palette for intro if available
-            if (this.styleRandomizer.lineStyles.length > 0) {
-                activePalette = this.styleRandomizer.getStyle(0).palette;
+        } else if (this.styleRandomizer.lineStyles.length > 0) {
+            // Between cues or before first cue - use nearest cue's palette
+            var nearestIdx = 0;
+            for (var i = 0; i < this.cues.length; i++) {
+                if (this.cues[i].start <= t) nearestIdx = i;
             }
-        } else {
-            // Outro - use last line's palette
-            var lastIdx = this.lyrics.length - 1;
-            if (this.styleRandomizer.lineStyles.length > 0 && lastIdx >= 0) {
-                activePalette = this.styleRandomizer.getStyle(lastIdx).palette;
-            }
+            activePalette = this.styleRandomizer.getStyle(nearestIdx).palette;
         }
 
         // Background gradient
@@ -581,82 +621,21 @@ class LyricVideoEngine {
         // Draw background effects
         this.bgManager.draw(ctx, activePalette);
 
-        // Draw content
-        var introFont = { title: activeFont.family, artist: activeFont.family };
-        if (t < introEnd) {
-            this._drawIntro(ctx, w, h, t, introEnd, activePalette, introFont);
-        } else if (t < lyricsEnd) {
-            this._drawLyrics(ctx, w, h, t - introEnd);
-        } else {
-            this._drawOutro(ctx, w, h, t - lyricsEnd, this.lineDuration * 2, activePalette, introFont);
+        // Draw lyrics if a cue is active
+        if (cueIndex >= 0) {
+            this._drawLyrics(ctx, w, h, cueIndex);
         }
     }
 
-    _drawIntro(ctx, w, h, t, duration, palette, font) {
-        var progress = t / duration;
-
-        // Large artist name in background
-        ctx.save();
-        var artistAlpha = Math.min(1, progress * 2);
-        ctx.globalAlpha = artistAlpha * 0.12;
-        ctx.fillStyle = palette.text;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-
-        var nameParts = this.artistName.toUpperCase().split(' ');
-        var bigSize = Math.min(w * 0.22, 180);
-        ctx.font = '900 ' + bigSize + 'px ' + font.title;
-
-        for (var i = 0; i < nameParts.length; i++) {
-            var yOffset = (i - (nameParts.length - 1) / 2) * bigSize * 1.1;
-            ctx.fillText(nameParts[i], w / 2, h / 2 + yOffset);
-        }
-        ctx.restore();
-
-        // Song title
-        ctx.save();
-        var titleAlpha = this._easeInOut(Math.max(0, Math.min(1, (progress - 0.1) * 3)));
-        ctx.globalAlpha = titleAlpha;
-        ctx.fillStyle = palette.text;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-
-        var titleSize = Math.min(w * 0.08, 72);
-        ctx.font = '700 ' + titleSize + 'px ' + font.title;
-        ctx.fillText(this.songTitle.toUpperCase(), w / 2, h * 0.35);
-
-        // Decorative line under title
-        var lineW = ctx.measureText(this.songTitle.toUpperCase()).width * 0.6 * titleAlpha;
-        ctx.strokeStyle = palette.accent;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(w / 2 - lineW / 2, h * 0.35 + titleSize * 0.6);
-        ctx.lineTo(w / 2 + lineW / 2, h * 0.35 + titleSize * 0.6);
-        ctx.stroke();
-
-        // Artist name (smaller)
-        var artistSmallAlpha = this._easeInOut(Math.max(0, Math.min(1, (progress - 0.3) * 3)));
-        ctx.globalAlpha = artistSmallAlpha;
-        var artistSize = Math.min(w * 0.035, 32);
-        ctx.font = '400 ' + artistSize + 'px ' + font.artist;
-        ctx.fillStyle = palette.secondary;
-        ctx.fillText(this.artistName, w / 2, h * 0.35 + titleSize * 0.6 + artistSize * 1.5);
-
-        ctx.restore();
-    }
-
-    _drawLyrics(ctx, w, h, t) {
-        var lineIndex = Math.floor(t / this.lineDuration);
-        var lineProgress = (t % this.lineDuration) / this.lineDuration;
-
-        if (lineIndex >= this.lyrics.length) return;
-
-        var currentLine = this.lyrics[lineIndex];
-        var nextLine = lineIndex < this.lyrics.length - 1 ? this.lyrics[lineIndex + 1] : null;
+    _drawLyrics(ctx, w, h, cueIndex) {
+        var cue = this.cues[cueIndex];
+        var lineProgress = (this.currentTime - cue.start) / (cue.end - cue.start);
+        var currentLine = cue.text;
+        var nextCue = cueIndex < this.cues.length - 1 ? this.cues[cueIndex + 1] : null;
 
         // Get randomized style for this line
-        var style = this.styleRandomizer.getStyle(lineIndex);
-        var palette = this.styleRandomizer.getInterpolatedPalette(lineIndex, lineProgress);
+        var style = this.styleRandomizer.getStyle(cueIndex);
+        var palette = this.styleRandomizer.getInterpolatedPalette(cueIndex, lineProgress);
         var fontStack = style ? style.font : FONT_STACKS[0];
         var easingName = style ? style.easing : 'easeOutCubic';
         var easingFn = EASING[easingName] || EASING.easeOutCubic;
@@ -681,11 +660,10 @@ class LyricVideoEngine {
             fontSize: mainSize,
             palette: palette
         });
-
         ctx.restore();
 
         // Next line preview
-        if (nextLine && lineProgress > 0.7) {
+        if (nextCue && lineProgress > 0.7) {
             ctx.save();
             var previewAlpha = (lineProgress - 0.7) / 0.3 * 0.2;
             ctx.globalAlpha = previewAlpha;
@@ -693,42 +671,9 @@ class LyricVideoEngine {
             var nextSize = mainSize * 0.5;
             ctx.font = '400 ' + nextSize + 'px ' + fontFamily;
             ctx.textAlign = 'center';
-            ctx.fillText(nextLine, w / 2, h * 0.65);
+            ctx.fillText(nextCue.text, w / 2, h * 0.65);
             ctx.restore();
         }
-
-        // Attribution
-        this._drawAttribution(ctx, w, h, palette);
-    }
-
-    _drawOutro(ctx, w, h, t, duration, palette, font) {
-        var progress = t / duration;
-        var alpha = 1 - this._easeIn(Math.max(0, (progress - 0.5) * 2));
-
-        ctx.save();
-        ctx.globalAlpha = alpha;
-        ctx.fillStyle = palette.text;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-
-        var titleSize = Math.min(w * 0.05, 48);
-        ctx.font = '700 ' + titleSize + 'px ' + font.title;
-        ctx.fillText(this.songTitle, w / 2, h * 0.4);
-
-        ctx.font = '400 ' + (titleSize * 0.5) + 'px ' + font.artist;
-        ctx.fillStyle = palette.secondary;
-        ctx.fillText(this.artistName, w / 2, h * 0.4 + titleSize * 1.2);
-
-        // Decorative dots
-        ctx.fillStyle = palette.accent;
-        ctx.globalAlpha = alpha * 0.5;
-        for (var i = 0; i < 3; i++) {
-            ctx.beginPath();
-            ctx.arc(w / 2 - 15 + i * 15, h * 0.55, 3, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        ctx.restore();
     }
 
     _calcFontSize(text, canvasWidth, fontFamily, fontWeight) {
@@ -743,31 +688,6 @@ class LyricVideoEngine {
             ctx.font = weight + ' ' + size + 'px ' + family;
         }
         return size;
-    }
-
-    _drawAttribution(ctx, w, h, palette) {
-        ctx.save();
-        ctx.globalAlpha = 0.4;
-        ctx.fillStyle = palette.secondary || '#888';
-        ctx.font = '400 14px "Segoe UI", Arial, sans-serif';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'bottom';
-        ctx.fillText(this.songTitle + ' \u2014 ' + this.artistName, 20, h - 20);
-        ctx.restore();
-    }
-
-    _roundRect(ctx, x, y, w, h, r) {
-        ctx.beginPath();
-        ctx.moveTo(x + r, y);
-        ctx.lineTo(x + w - r, y);
-        ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-        ctx.lineTo(x + w, y + h - r);
-        ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-        ctx.lineTo(x + r, y + h);
-        ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-        ctx.lineTo(x, y + r);
-        ctx.quadraticCurveTo(x, y, x + r, y);
-        ctx.closePath();
     }
 
     _easeInOut(t) {
