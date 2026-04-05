@@ -30,10 +30,18 @@ body {
 #sidebar h1 {
     font-size: 20px;
     font-weight: 700;
-    margin-bottom: 24px;
+    margin-bottom: 4px;
     color: #fff;
     line-height: 1.3;
     letter-spacing: -0.5px;
+}
+
+.subtitle {
+    font-size: 11px;
+    color: #7c6df0;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    margin-bottom: 20px;
 }
 
 .control-group {
@@ -105,30 +113,6 @@ input[type="file"]::file-selector-button {
     margin-right: 8px;
 }
 
-/* Theme Buttons */
-.theme-buttons {
-    display: flex;
-    gap: 8px;
-}
-
-.theme-btn {
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    border: 2px solid transparent;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.theme-btn:hover {
-    transform: scale(1.1);
-}
-
-.theme-btn.active {
-    border-color: #fff;
-    box-shadow: 0 0 0 2px rgba(124, 109, 240, 0.5);
-}
-
 /* Buttons */
 .button-group {
     display: flex;
@@ -181,6 +165,33 @@ input[type="file"]::file-selector-button {
     background: #c0392b;
 }
 
+.btn-randomize {
+    width: 100%;
+    background: linear-gradient(135deg, #7c6df0, #e74c3c);
+    color: #fff;
+    padding: 12px;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.btn-randomize:hover {
+    transform: scale(1.02);
+    box-shadow: 0 4px 15px rgba(124, 109, 240, 0.3);
+}
+
+.seed-label {
+    display: block;
+    margin-top: 4px;
+    font-size: 11px;
+    color: #666;
+    font-family: monospace;
+}
+
 .recording-status {
     display: flex;
     align-items: center;
@@ -197,6 +208,10 @@ input[type="file"]::file-selector-button {
     display: none;
 }
 
+.hidden {
+    display: none !important;
+}
+
 .rec-dot {
     width: 10px;
     height: 10px;
@@ -208,6 +223,17 @@ input[type="file"]::file-selector-button {
 @keyframes recBlink {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.3; }
+}
+
+.stats-bar {
+    margin-top: 16px;
+    padding: 8px 12px;
+    background: rgba(124, 109, 240, 0.08);
+    border-radius: 6px;
+    font-size: 11px;
+    color: #7c6df0;
+    text-align: center;
+    letter-spacing: 0.3px;
 }
 
 /* Preview Area */
