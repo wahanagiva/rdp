@@ -1,41 +1,27 @@
-// ============================================================
-// App Controller - UI bindings & interaction
-// ============================================================
-
 (function () {
     const canvas = document.getElementById('lyricCanvas');
     const engine = new LyricVideoEngine(canvas);
 
-    // UI Elements
     const songTitleInput = document.getElementById('songTitle');
     const artistNameInput = document.getElementById('artistName');
     const lyricsInput = document.getElementById('lyricsInput');
     const lineDurationInput = document.getElementById('lineDuration');
     const lineDurationVal = document.getElementById('lineDurationVal');
-    const animStyleSelect = document.getElementById('animationStyle');
-    const fontStyleSelect = document.getElementById('fontStyle');
     const audioFileInput = document.getElementById('audioFile');
     const previewBtn = document.getElementById('previewBtn');
     const playPauseBtn = document.getElementById('playPauseBtn');
     const recordBtn = document.getElementById('recordBtn');
     const recordingStatus = document.getElementById('recordingStatus');
     const timelineProgress = document.getElementById('timelineProgress');
-    const themeButtons = document.querySelectorAll('.theme-btn');
+    const randomizeSeedBtn = document.getElementById('randomizeSeed');
+    const seedDisplay = document.getElementById('seedDisplay');
 
-    let currentTheme = 'warm';
+    let currentSeed = Date.now();
+    seedDisplay.textContent = 'seed: ' + currentSeed;
 
     // Duration slider
     lineDurationInput.addEventListener('input', () => {
         lineDurationVal.textContent = lineDurationInput.value + 's';
-    });
-
-    // Theme buttons
-    themeButtons.forEach(btn => {
-        btn.addEventListener('click', () => {
-            themeButtons.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            currentTheme = btn.dataset.theme;
-        });
     });
 
     // Audio file
@@ -50,16 +36,32 @@
         }
     });
 
-    // Configure engine from UI
+    // Randomize button
+    randomizeSeedBtn.addEventListener('click', () => {
+        currentSeed = Date.now();
+        seedDisplay.textContent = 'seed: ' + currentSeed;
+        if (!engine.playing) {
+            applyConfig();
+            engine.onProgress = (p) => {
+                timelineProgress.style.width = (p * 100) + '%';
+            };
+            engine.onComplete = () => {
+                playPauseBtn.textContent = 'Replay';
+                playPauseBtn.disabled = false;
+            };
+            engine.start();
+            playPauseBtn.disabled = false;
+            playPauseBtn.textContent = 'Pause';
+        }
+    });
+
     function applyConfig() {
         engine.configure({
             title: songTitleInput.value || 'Untitled',
             artist: artistNameInput.value || 'Unknown Artist',
             lyrics: lyricsInput.value,
             lineDuration: parseFloat(lineDurationInput.value),
-            theme: currentTheme,
-            animStyle: animStyleSelect.value,
-            fontStyle: fontStyleSelect.value,
+            seed: currentSeed,
         });
     }
 
@@ -131,57 +133,49 @@
         playPauseBtn.textContent = 'Pause';
     });
 
-    // Initial render - draw a static frame
+    // Initial frame
     function drawInitialFrame() {
-        applyConfig();
         const ctx = canvas.getContext('2d');
-        const theme = THEMES[currentTheme];
         const w = canvas.width;
         const h = canvas.height;
+        const palette = COLOR_PALETTES[0];
 
-        // Background
         const grad = ctx.createLinearGradient(0, 0, w, h);
-        grad.addColorStop(0, theme.bgGradient[0]);
-        grad.addColorStop(1, theme.bgGradient[1]);
+        grad.addColorStop(0, palette.bgGradient[0]);
+        grad.addColorStop(1, palette.bgGradient[1]);
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, w, h);
 
-        // Centered text
-        ctx.fillStyle = theme.text;
+        ctx.fillStyle = palette.text;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.globalAlpha = 0.15;
-        ctx.font = `900 140px Georgia, serif`;
+        ctx.globalAlpha = 0.12;
+        ctx.font = '900 140px Georgia, serif';
         const nameParts = (artistNameInput.value || 'ARTIST').toUpperCase().split(' ');
         nameParts.forEach((part, i) => {
             ctx.fillText(part, w / 2, h / 2 + (i - (nameParts.length - 1) / 2) * 150);
         });
 
         ctx.globalAlpha = 1;
-        ctx.font = `700 64px Georgia, serif`;
+        ctx.font = '700 64px Georgia, serif';
         ctx.fillText((songTitleInput.value || 'TITLE').toUpperCase(), w / 2, h * 0.35);
 
-        ctx.globalAlpha = 0.6;
-        ctx.font = `400 24px "Segoe UI", sans-serif`;
-        ctx.fillStyle = theme.secondary;
-        ctx.fillText('Klik "Preview" untuk mulai', w / 2, h * 0.65);
+        ctx.globalAlpha = 0.5;
+        ctx.font = '400 22px "Segoe UI", sans-serif';
+        ctx.fillStyle = palette.secondary;
+        ctx.fillText('Klik "Preview" untuk mulai', w / 2, h * 0.62);
+
+        ctx.globalAlpha = 0.3;
+        ctx.font = '400 16px "Segoe UI", sans-serif';
+        ctx.fillText('5,400,000+ kombinasi visual unik', w / 2, h * 0.68);
         ctx.globalAlpha = 1;
     }
 
     drawInitialFrame();
 
-    // Redraw initial frame when inputs change (only if not playing)
     [songTitleInput, artistNameInput].forEach(input => {
         input.addEventListener('input', () => {
             if (!engine.playing) drawInitialFrame();
-        });
-    });
-
-    themeButtons.forEach(btn => {
-        btn.addEventListener('click', () => {
-            setTimeout(() => {
-                if (!engine.playing) drawInitialFrame();
-            }, 50);
         });
     });
 })();

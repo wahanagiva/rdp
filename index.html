@@ -8,9 +8,9 @@
 </head>
 <body>
     <div id="app">
-        <!-- Sidebar Controls -->
         <aside id="sidebar">
             <h1>Lyric Video<br>Generator</h1>
+            <p class="subtitle">5.4M+ Kombinasi Visual Unik</p>
 
             <div class="control-group">
                 <label>Judul Lagu</label>
@@ -35,48 +35,35 @@ Underneath the tune
 We shine like diamonds
 In the velvet night
 Every word we speak
-Becomes a point of light</textarea>
+Becomes a point of light
+Rising from the ashes
+Burning ever bright
+We are made of stars
+Dancing through the night
+Echoes in the silence
+Whispers in the wind
+Every ending here
+Is where we begin
+Colors paint the sky
+As the world turns slow
+We are stardust falling
+Everywhere we go</textarea>
             </div>
 
             <div class="control-group">
                 <label>Durasi per Baris (detik)</label>
-                <input type="range" id="lineDuration" min="1" max="6" step="0.5" value="3">
+                <input type="range" id="lineDuration" min="1" max="8" step="0.5" value="3">
                 <span id="lineDurationVal">3s</span>
-            </div>
-
-            <div class="control-group">
-                <label>Tema Warna</label>
-                <div class="theme-buttons">
-                    <button class="theme-btn active" data-theme="warm" style="background: linear-gradient(135deg, #f5e6c8, #e8c99b)"></button>
-                    <button class="theme-btn" data-theme="night" style="background: linear-gradient(135deg, #1a1a2e, #16213e)"></button>
-                    <button class="theme-btn" data-theme="forest" style="background: linear-gradient(135deg, #2d5016, #4a7c28)"></button>
-                    <button class="theme-btn" data-theme="sunset" style="background: linear-gradient(135deg, #ff6b6b, #ffa07a)"></button>
-                    <button class="theme-btn" data-theme="ocean" style="background: linear-gradient(135deg, #0077b6, #00b4d8)"></button>
-                </div>
-            </div>
-
-            <div class="control-group">
-                <label>Gaya Animasi</label>
-                <select id="animationStyle">
-                    <option value="artistic">Artistik (Burung & Panah)</option>
-                    <option value="particles">Partikel Bintang</option>
-                    <option value="waves">Gelombang</option>
-                    <option value="minimal">Minimal</option>
-                </select>
-            </div>
-
-            <div class="control-group">
-                <label>Font</label>
-                <select id="fontStyle">
-                    <option value="serif">Serif (Klasik)</option>
-                    <option value="sans">Sans-Serif (Modern)</option>
-                    <option value="display">Display (Bold)</option>
-                </select>
             </div>
 
             <div class="control-group">
                 <label>Audio (opsional)</label>
                 <input type="file" id="audioFile" accept="audio/*">
+            </div>
+
+            <div class="control-group">
+                <button id="randomizeSeed" class="btn btn-randomize">Randomize Styles</button>
+                <span id="seedDisplay" class="seed-label"></span>
             </div>
 
             <div class="button-group">
@@ -89,9 +76,12 @@ Becomes a point of light</textarea>
                 <div class="rec-dot"></div>
                 <span>Merekam...</span>
             </div>
+
+            <div class="stats-bar">
+                <span>33 efek teks &bull; 60 palet &bull; 15 font &bull; 12 background</span>
+            </div>
         </aside>
 
-        <!-- Canvas Preview -->
         <main id="preview-area">
             <canvas id="lyricCanvas" width="1280" height="720"></canvas>
             <div id="timeline">
