@@ -4,6 +4,8 @@
 
     var srtFileInput = document.getElementById('srtFile');
     var srtStatus = document.getElementById('srtStatus');
+    var songTitleInput = document.getElementById('songTitle');
+    var artistNameInput = document.getElementById('artistName');
     var audioFileInput = document.getElementById('audioFile');
     var previewBtn = document.getElementById('previewBtn');
     var playPauseBtn = document.getElementById('playPauseBtn');
@@ -13,9 +15,107 @@
     var randomizeSeedBtn = document.getElementById('randomizeSeed');
     var seedDisplay = document.getElementById('seedDisplay');
 
+    // YouTube elements
+    var tabFile = document.getElementById('tabFile');
+    var tabYoutube = document.getElementById('tabYoutube');
+    var audioFilePanel = document.getElementById('audioFilePanel');
+    var audioYoutubePanel = document.getElementById('audioYoutubePanel');
+    var youtubeUrlInput = document.getElementById('youtubeUrl');
+    var loadYtBtn = document.getElementById('loadYtBtn');
+    var ytStatus = document.getElementById('ytStatus');
+
     var currentSeed = Date.now();
     var currentSrtText = '';
+    var ytPlayer = null;
+    var ytReady = false;
     seedDisplay.textContent = 'seed: ' + currentSeed;
+
+    // Audio source tabs
+    tabFile.addEventListener('click', function () {
+        tabFile.classList.add('active');
+        tabYoutube.classList.remove('active');
+        audioFilePanel.classList.remove('hidden');
+        audioYoutubePanel.classList.add('hidden');
+        engine.clearYouTube();
+    });
+
+    tabYoutube.addEventListener('click', function () {
+        tabYoutube.classList.add('active');
+        tabFile.classList.remove('active');
+        audioYoutubePanel.classList.remove('hidden');
+        audioFilePanel.classList.add('hidden');
+    });
+
+    // YouTube IFrame API
+    function extractYouTubeId(url) {
+        var match = url.match(/(?:youtube\.com\/(?:watch\?v=|embed\/|v\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
+        return match ? match[1] : null;
+    }
+
+    window.onYouTubeIframeAPIReady = function () {
+        ytReady = true;
+    };
+
+    function loadYouTubeVideo(videoId) {
+        if (ytPlayer) {
+            ytPlayer.loadVideoById(videoId);
+            ytPlayer.pauseVideo();
+            return;
+        }
+
+        ytPlayer = new YT.Player('ytPlayer', {
+            height: '1',
+            width: '1',
+            videoId: videoId,
+            playerVars: {
+                autoplay: 0,
+                controls: 0,
+                disablekb: 1,
+                fs: 0,
+                modestbranding: 1
+            },
+            events: {
+                onReady: function () {
+                    ytPlayer.pauseVideo();
+                    engine.setYouTubePlayer(ytPlayer);
+                    ytStatus.textContent = 'Audio YouTube siap';
+                    ytStatus.style.color = '#7cb342';
+                },
+                onError: function (e) {
+                    ytStatus.textContent = 'Error: tidak bisa memuat video';
+                    ytStatus.style.color = '#e74c3c';
+                    console.error('YT Error:', e.data);
+                }
+            }
+        });
+    }
+
+    loadYtBtn.addEventListener('click', function () {
+        var url = youtubeUrlInput.value.trim();
+        if (!url) return;
+
+        var videoId = extractYouTubeId(url);
+        if (!videoId) {
+            ytStatus.textContent = 'URL YouTube tidak valid';
+            ytStatus.style.color = '#e74c3c';
+            return;
+        }
+
+        ytStatus.textContent = 'Memuat...';
+        ytStatus.style.color = '#999';
+
+        if (ytReady) {
+            loadYouTubeVideo(videoId);
+        } else {
+            // Wait for API to be ready
+            var checkInterval = setInterval(function () {
+                if (ytReady) {
+                    clearInterval(checkInterval);
+                    loadYouTubeVideo(videoId);
+                }
+            }, 200);
+        }
+    });
 
     // SRT file loading
     srtFileInput.addEventListener('change', function (e) {
@@ -25,7 +125,7 @@
         var reader = new FileReader();
         reader.onload = function (ev) {
             currentSrtText = ev.target.result;
-            engine.configure({ srtText: currentSrtText, seed: currentSeed });
+            reconfigure();
 
             if (engine.cues.length > 0) {
                 srtStatus.textContent = engine.cues.length + ' baris lirik dimuat (' + Math.round(engine.totalDuration) + 's)';
@@ -40,6 +140,23 @@
             }
         };
         reader.readAsText(file);
+    });
+
+    function reconfigure() {
+        engine.configure({
+            srtText: currentSrtText,
+            seed: currentSeed,
+            songTitle: songTitleInput.value.trim(),
+            artistName: artistNameInput.value.trim()
+        });
+    }
+
+    // Reconfigure when title/artist changes
+    songTitleInput.addEventListener('input', function () {
+        if (currentSrtText && engine.cues.length > 0) reconfigure();
+    });
+    artistNameInput.addEventListener('input', function () {
+        if (currentSrtText && engine.cues.length > 0) reconfigure();
     });
 
     // Audio file
@@ -60,7 +177,7 @@
         seedDisplay.textContent = 'seed: ' + currentSeed;
 
         if (currentSrtText && engine.cues.length > 0) {
-            engine.configure({ srtText: currentSrtText, seed: currentSeed });
+            reconfigure();
             if (!engine.playing) {
                 startPreview();
             }
@@ -69,7 +186,7 @@
 
     function startPreview() {
         engine.stop();
-        engine.configure({ srtText: currentSrtText, seed: currentSeed });
+        reconfigure();
 
         engine.onProgress = function (p) {
             timelineProgress.style.width = (p * 100) + '%';
@@ -120,7 +237,7 @@
         }
 
         engine.stop();
-        engine.configure({ srtText: currentSrtText, seed: currentSeed });
+        reconfigure();
 
         engine.onProgress = function (p) {
             timelineProgress.style.width = (p * 100) + '%';
